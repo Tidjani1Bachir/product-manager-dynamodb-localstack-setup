@@ -10,7 +10,8 @@ built for the web and desktop — fast, real-time, and production-ready.
 [![Vite](https://img.shields.io/badge/Vite-6-646cff?style=flat-square&logo=vite)](https://vitejs.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com)
 [![Express](https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express)](https://expressjs.com)
-[![Turso](https://img.shields.io/badge/Turso-libSQL-4ff8d2?style=flat-square)](https://turso.tech)
+[![DynamoDB](https://img.shields.io/badge/AWS-DynamoDB-4053d6?style=flat-square&logo=amazondynamodb)](https://aws.amazon.com/dynamodb)
+[![LocalStack](https://img.shields.io/badge/LocalStack-AWS%20Emulator-2a9d8f?style=flat-square)](https://localstack.cloud)
 [![Tauri](https://img.shields.io/badge/Tauri-Desktop-ffc131?style=flat-square&logo=tauri)](https://tauri.app)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ed?style=flat-square&logo=docker)](https://www.docker.com)
 
@@ -23,7 +24,11 @@ built for the web and desktop — fast, real-time, and production-ready.
 
 ## 🐳 Docker (Local Development)
 
-Run the entire stack locally with a single command — no Node.js installation required.
+Run the entire stack locally — no Node.js installation required.
+
+The setup uses **two Docker Compose files**:
+- `docker-compose.localstack.yml` — starts LocalStack (AWS DynamoDB emulator)
+- `docker-compose.yml` — starts the frontend and backend containers
 
 ### Prerequisites
 
@@ -34,30 +39,63 @@ Run the entire stack locally with a single command — no Node.js installation r
 ```bash
 # Clone the repo
 git clone https://github.com/your-username/product_manager.git
-cd product_manager
+cd product_manager/server
 
 # Copy and fill in your environment variables
-cp server/.env.example server/.env
+cp .env.example .env
 
-# Build and start all containers
+# Step 1 — Start LocalStack (DynamoDB emulator) first
+cd server
+docker compose -f docker-compose.localstack.yml up -d
+
+# Step 2 — Verify LocalStack is healthy before continuing
+docker ps
+# You should see localstack_dynamo with status (healthy)
+
+# Step 3 — Start the app containers
 docker compose up --build
+
+# Step 4 — Start the app containers
+#you can run the backend app by 
+npm run dev 
 ```
 
-| Service  | URL                   |
-|----------|-----------------------|
-| Frontend | http://localhost      |
-| Backend  | http://localhost/api  |
+> ⚠️ **Important:** Always start LocalStack before the backend. The backend connects to DynamoDB on startup and will crash if LocalStack is not running.
+
+| Service   | URL                   |
+|-----------|-----------------------|
+| Frontend  | http://localhost      |
+| Backend   | http://localhost/api  |
+| LocalStack| http://localhost:4566 |
 
 ### Container Architecture
 
-| Container            | Image         | Role                              |
-|----------------------|---------------|-----------------------------------|
-| `product_manager_ui` | nginx:alpine  | Serves the React build + proxies API |
-| `product_manager_api`| node:20-alpine| Express REST API on port 5000     |
+| Container              | Image                      | Role                                  |
+|------------------------|----------------------------|---------------------------------------|
+| `localstack_dynamo`    | localstack/localstack:3    | AWS DynamoDB emulator on port 4566    |
+| `product_manager_ui`   | nginx:alpine               | Serves the React build + proxies API  |
+| `product_manager_api`  | node:20-alpine             | Express REST API on port 5001         |
 
 ### Common Commands
 
 ```bash
+# ── LocalStack (DynamoDB) ──────────────────────────────────────
+
+# Start LocalStack
+docker compose -f docker-compose.localstack.yml up -d
+
+# Stop LocalStack
+docker compose -f docker-compose.localstack.yml down
+
+# Check LocalStack health
+docker ps
+# localstack_dynamo should show (healthy)
+
+# View LocalStack logs
+docker logs localstack_dynamo
+
+# ── App containers ─────────────────────────────────────────────
+
 # Start (detached — terminal stays free)
 docker compose up -d
 
@@ -81,13 +119,29 @@ docker compose build --no-cache
 docker compose up
 ```
 
-> **Note:** Docker is for local development only. Production runs on Vercel (frontend) and Vercel serverless (backend API).
+### Switching from LocalStack to Real AWS
+
+The app is fully production-ready for real AWS DynamoDB. To switch, open `server/.env` and make one change:
+
+```env
+# Remove this line to use real AWS:
+# DYNAMO_ENDPOINT=http://localhost:4566
+
+# Replace fake credentials with your real AWS credentials:
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_real_key
+AWS_SECRET_ACCESS_KEY=your_real_secret
+```
+
+No code changes required — the AWS SDK automatically points to real AWS when `DYNAMO_ENDPOINT` is absent.
 
 ---
 
 ## ✨ Overview
 
-Product Manager is a full-featured inventory platform that combines a responsive React frontend with a Node/Express backend and a globally distributed Turso (libSQL) database. It supports real-time product and category management, dashboard analytics, a recycle-bin recovery system, PDF export, Cloudinary image uploads, and a polished light/dark theme — all optionally packageable as a native desktop app via Tauri.
+Product Manager is a full-featured inventory platform that combines a responsive React frontend with a Node/Express backend and AWS DynamoDB for data storage. It supports real-time product and category management, dashboard analytics, a recycle-bin recovery system, PDF export, Cloudinary image uploads, and a polished light/dark theme — all optionally packageable as a native desktop app via Tauri.
+
+The database layer was migrated from Turso (SQLite) to **AWS DynamoDB** using a multi-table design with UUID v4 keys and the AWS SDK v3 Document Client. LocalStack is used locally to emulate AWS services with zero cost and no cloud account required.
 
 ---
 
@@ -123,15 +177,16 @@ Add, edit, duplicate, delete, and update stock — all changes are reflected ins
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Zustand |
-| **Backend** | Node.js, Express |
-| **Database** | Turso / libSQL via `@libsql/client` |
-| **Media** | Cloudinary + `multer-storage-cloudinary` |
-| **PDF** | pdfmake |
-| **Desktop** | Tauri |
-| **Local Dev** | Docker, Docker Compose, nginx |
+| Layer        | Technology                                              |
+|--------------|---------------------------------------------------------|
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Zustand   |
+| **Backend**  | Node.js, Express                                        |
+| **Database** | AWS DynamoDB via AWS SDK v3 Document Client             |
+| **Local DB** | LocalStack (free AWS emulator running in Docker)        |
+| **Media**    | Cloudinary + `multer-storage-cloudinary`                |
+| **PDF**      | pdfmake                                                 |
+| **Desktop**  | Tauri                                                   |
+| **Local Dev**| Docker, Docker Compose, nginx                           |
 
 ---
 
@@ -145,10 +200,15 @@ product_manager/
 │   ├── store/                  # Zustand stores
 │   └── context/                # Legacy context (see Notes)
 ├── server/                     # Express backend
-│   ├── routes/                 # API route handlers
+│   ├── routes/
+│   │   ├── products.js         # Product CRUD routes
+│   │   ├── categories.js       # Category routes
+│   │   ├── dashboard.js        # Dashboard stats
+│   │   └── recycleBin.js       # Recycle bin routes
 │   ├── server.js               # App entry point
-│   ├── db.js                   # libSQL client setup
-│   └── cloudinary.js           # Cloudinary config
+│   ├── db.js                   # DynamoDB client + table bootstrap
+│   ├── cloudinary.js           # Cloudinary config
+│   └── docker-compose.localstack.yml  # LocalStack setup
 ├── src-tauri/                  # Tauri desktop scaffold
 ├── public/
 ├── Dockerfile                  # Frontend Docker build
@@ -166,35 +226,72 @@ product_manager/
 Create a `.env` file inside the `server/` directory:
 
 ```env
-# Database — Turso / libSQL
-TURSO_DATABASE_URL=your_turso_database_url
-TURSO_AUTH_TOKEN=your_turso_auth_token
+# ── AWS DynamoDB via LocalStack (local development) ────────────
+DYNAMO_ENDPOINT=http://localhost:4566
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
 
-# Media — Cloudinary
+# ── AWS DynamoDB (production — remove DYNAMO_ENDPOINT above) ───
+# AWS_REGION=us-east-1
+# AWS_ACCESS_KEY_ID=your_real_key
+# AWS_SECRET_ACCESS_KEY=your_real_secret
+
+# ── Media — Cloudinary ─────────────────────────────────────────
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 
-# Server
-PORT=5000
+# ── Server ─────────────────────────────────────────────────────
+PORT=5001
 ```
 
-> **Optional** — Frontend API base URL (defaults to `http://localhost:5000/api` if omitted):
+> **Optional** — Frontend API base URL (defaults to `http://localhost:5001/api` if omitted):
 > ```env
-> VITE_API_URL=http://localhost:5000/api
+> VITE_API_URL=http://localhost:5001/api
 > ```
+
+---
+
+## 🗄️ DynamoDB Schema
+
+The app uses a **multi-table design** with UUID v4 primary keys. Tables are created automatically on server startup via `db.js`.
+
+| Table          | Primary Key  | Description                        |
+|----------------|--------------|------------------------------------|
+| `Products`     | `productId`  | All product data + stock status    |
+| `Categories`   | `categoryId` | Category metadata + soft-delete    |
+| `StockHistory` | `historyId`  | Stock change log per product       |
+| `AppSettings`  | `settingKey` | App-level key/value configuration  |
+
+### Key DynamoDB operations used
+
+| Operation       | SDK Command       | Used for                        |
+|-----------------|-------------------|---------------------------------|
+| Get by ID       | `GetCommand`      | Fetch single product/category   |
+| List all        | `ScanCommand`     | Fetch all products/categories   |
+| Create          | `PutCommand`      | Insert new item with UUID v4    |
+| Update fields   | `UpdateCommand`   | Partial update with SET/REMOVE  |
+| Hard delete     | `DeleteCommand`   | Permanent deletion              |
 
 ---
 
 ## 🧑‍💻 Local Development
 
-### Option A — Docker (recommended)
+### Option A — Manual (recommended for development)
 
-See the [Docker section](#-docker-local-development) above.
+#### 1. Start LocalStack first
 
-### Option B — Manual
+```bash
+cd server
+docker compose -f docker-compose.localstack.yml up -d
 
-#### 1. Install dependencies
+# Wait ~15 seconds then verify it's healthy
+docker ps
+# localstack_dynamo should show (healthy)
+```
+
+#### 2. Install dependencies
 
 ```bash
 # Frontend
@@ -204,7 +301,7 @@ npm install
 cd server && npm install
 ```
 
-#### 2. Start development servers
+#### 3. Start development servers
 
 Open two terminals:
 
@@ -212,17 +309,29 @@ Open two terminals:
 # Terminal 1 — Backend
 cd server
 npm run dev
+# You should see:
+# 🚀 Server running on port 5001
+# ✅ Table created: Products
+# ✅ Table created: Categories
+# ✅ Table created: StockHistory
+# ✅ Table created: AppSettings
+# ✅ DynamoDB ready (LocalStack)
 
 # Terminal 2 — Frontend
 npm run dev
 ```
 
-#### 3. Open in browser
+#### 4. Open in browser
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend | http://localhost:5000 |
+| Service  | URL                    |
+|----------|------------------------|
+| Frontend | http://localhost:5173  |
+| Backend  | http://localhost:5001  |
+| DynamoDB | http://localhost:4566  |
+
+### Option B — Docker
+
+See the [Docker section](#-docker-local-development) above.
 
 ---
 
@@ -230,23 +339,23 @@ npm run dev
 
 ### From the project root
 
-| Script | Description |
-|---|---|
-| `npm run dev` | Start Vite frontend dev server |
-| `npm run build` | Build frontend for production |
-| `npm run preview` | Preview production build |
-| `npm run lint` | Run ESLint |
-| `npm run test` | Run Vitest unit tests |
-| `npm run test:e2e` | Run Playwright end-to-end tests |
-| `npm run test:api` | Run backend API tests |
-| `npm run tauri` | Run Tauri CLI command |
+| Script              | Description                          |
+|---------------------|--------------------------------------|
+| `npm run dev`       | Start Vite frontend dev server       |
+| `npm run build`     | Build frontend for production        |
+| `npm run preview`   | Preview production build             |
+| `npm run lint`      | Run ESLint                           |
+| `npm run test`      | Run Vitest unit tests                |
+| `npm run test:e2e`  | Run Playwright end-to-end tests      |
+| `npm run test:api`  | Run backend API tests                |
+| `npm run tauri`     | Run Tauri CLI command                |
 
 ### From `server/`
 
-| Script | Description |
-|---|---|
-| `npm run dev` | Start backend with nodemon (hot reload) |
-| `npm run start` | Start backend with node |
+| Script          | Description                            |
+|-----------------|----------------------------------------|
+| `npm run dev`   | Start backend with nodemon (hot reload)|
+| `npm run start` | Start backend with node                |
 
 ---
 
@@ -254,44 +363,43 @@ npm run dev
 
 ### Products
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/products` | List all active products |
-| `GET` | `/api/products/:id` | Get single product |
-| `POST` | `/api/products` | Create product |
-| `PUT` | `/api/products/:id` | Update product |
-| `DELETE` | `/api/products/:id` | Soft-delete product |
-| `PUT` | `/api/products/:id/stock` | Update stock level |
-| `POST` | `/api/products/:id/duplicate` | Duplicate product |
-| `GET` | `/api/products/:id/pdf` | Download product PDF |
+| Method   | Endpoint                         | Description             |
+|----------|----------------------------------|-------------------------|
+| `GET`    | `/api/products`                  | List all active products|
+| `GET`    | `/api/products/:id`              | Get single product      |
+| `POST`   | `/api/products`                  | Create product          |
+| `PUT`    | `/api/products/:id`              | Update product          |
+| `DELETE` | `/api/products/:id`              | Soft-delete product     |
+| `PUT`    | `/api/products/:id/stock`        | Update stock level      |
+| `POST`   | `/api/products/:id/duplicate`    | Duplicate product       |
+| `GET`    | `/api/products/:id/pdf`          | Download product PDF    |
+| `GET`    | `/api/products/:id/stock-history`| Get stock change log    |
 
 ### Categories
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/categories` | List all active categories |
-| `GET` | `/api/categories/:id` | Get single category |
-| `POST` | `/api/categories` | Create or restore category |
-| `PUT` | `/api/categories/:id` | Update category |
-| `DELETE` | `/api/categories/:id` | Soft-delete category + linked products |
+| Method   | Endpoint               | Description                           |
+|----------|------------------------|---------------------------------------|
+| `GET`    | `/api/categories`      | List all active categories            |
+| `GET`    | `/api/categories/:id`  | Get single category                   |
+| `POST`   | `/api/categories`      | Create or restore category            |
+| `PUT`    | `/api/categories/:id`  | Update category                       |
+| `DELETE` | `/api/categories/:id`  | Soft-delete category + linked products|
 
 ### Recycle Bin
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/recycle-bin` | List deleted products and categories |
-| `POST` | `/api/recycle-bin/products/:id/restore` | Restore deleted product |
-| `DELETE` | `/api/recycle-bin/products/:id/permanent` | Permanently delete product |
-| `POST` | `/api/recycle-bin/categories/:id/restore` | Restore category + linked products |
+| Method   | Endpoint                                    | Description                     |
+|----------|---------------------------------------------|---------------------------------|
+| `GET`    | `/api/recycle-bin`                          | List deleted products/categories|
+| `POST`   | `/api/recycle-bin/products/:id/restore`     | Restore deleted product         |
+| `DELETE` | `/api/recycle-bin/products/:id/permanent`   | Permanently delete product      |
+| `POST`   | `/api/recycle-bin/categories/:id/restore`   | Restore category + products     |
 
 ### Dashboard & Uploads
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/dashboard/stats` | Fetch all dashboard KPIs |
-| `POST` | `/api/upload-image` | Upload image to Cloudinary |
-
-> 📖 Full SQL details for every endpoint are documented in [`docs/sql-catalog.md`](docs/sql-catalog.md).
+| Method | Endpoint               | Description                  |
+|--------|------------------------|------------------------------|
+| `GET`  | `/api/dashboard/stats` | Fetch all dashboard KPIs     |
+| `POST` | `/api/upload-image`    | Upload image to Cloudinary   |
 
 ---
 
@@ -313,8 +421,6 @@ npm run tauri build
 
 ## 🏷️ Git Tag & Release Workflow
 
-Follow this flow when publishing a new GitHub release.
-
 #### Step 1 — Ensure a clean, up-to-date branch
 
 ```bash
@@ -332,16 +438,16 @@ npm run build
 
 #### Step 3 — Choose a semantic version
 
-| Change type | Example |
-|---|---|
-| Bug fixes only | `v2.2.1` |
+| Change type                      | Example  |
+|----------------------------------|----------|
+| Bug fixes only                   | `v2.2.1` |
 | New backward-compatible features | `v2.3.0` |
-| Breaking changes | `v3.0.0` |
+| Breaking changes                 | `v3.0.0` |
 
 #### Step 4 — Create an annotated tag
 
 ```bash
-git tag -a v2.3.0 -m "v2.3.0: realtime dashboard, recycle-bin improvements, dark mode polish"
+git tag -a v2.3.0 -m "v2.3.0: migrated database to AWS DynamoDB, LocalStack dev setup"
 ```
 
 #### Step 5 — Push commits and tag
@@ -356,7 +462,7 @@ git push origin v2.3.0
 1. Go to your repository → **Releases** → **Draft a new release**
 2. Select tag: `v2.3.0`
 3. Set title: `v2.3.0`
-4. Add release notes (see template below)
+4. Add release notes
 
 ---
 
@@ -366,22 +472,25 @@ git push origin v2.3.0
 ## v2.3.0
 
 ### Summary
-- Dashboard category breakdown now reflects active categories in real time
-- Recycle bin category/product behavior refined
-- Dark mode and sidebar readability improvements
-- Product list selected-row visibility improvements
+- Migrated database from Turso (SQLite) → AWS DynamoDB
+- Multi-table DynamoDB schema with UUID v4 keys
+- LocalStack integration for local development (no AWS account needed)
+- AWS SDK v3 Document Client for all database operations
+- Production AWS-ready — single .env change to deploy
 
 ### Backend
-- Dashboard category filtering updated for deleted categories
-- Recycle bin and category lifecycle behavior validated
+- db.js rewritten — DynamoDB client + auto table bootstrap on startup
+- All routes migrated: products, categories, dashboard, recycleBin
+- Aggregations moved from SQL to JavaScript (DynamoDB pattern)
+- ScanCommand, GetCommand, PutCommand, UpdateCommand, DeleteCommand
 
-### Frontend
-- Real-time dashboard refresh hooks on category lifecycle events
-- Theme toggle visual polish
-- Dark-mode readability improvements in sidebar and product list
+### Infrastructure
+- Added docker-compose.localstack.yml for local DynamoDB emulation
+- Server port changed to 5001 (5000 reserved for other local services)
 
 ### Known Notes
-- If theme styles appear stale in browser, hard refresh once (Ctrl+Shift+R).
+- LocalStack must be running before starting the backend
+- Run: docker compose -f docker-compose.localstack.yml up -d
 ```
 
 ---
@@ -389,4 +498,5 @@ git push origin v2.3.0
 ## 🗒️ Notes
 
 - **`DarkModeContext.tsx`** — Located at `src/context/DarkModeContext.tsx`. This is a legacy file and is **not** part of the active theme system. Theme state is managed through the Zustand theme store and the `ThemeToggle` component.
-- **SQL Reference** — Every SQL statement used in this project is catalogued in [`docs/sql-catalog.md`](docs/sql-catalog.md), mapped to its endpoint and execution context.
+- **DynamoDB local persistence** — LocalStack data is stored in a Docker volume (`localstack_data`). Data persists between container restarts but is lost if the volume is deleted (`docker compose -f docker-compose.localstack.yml down -v`).
+- **Production AWS** — Remove `DYNAMO_ENDPOINT` from `.env` and add real AWS credentials. No code changes required.

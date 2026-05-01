@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
+    "start:local": "docker compose -f docker-compose.localstack.yml up -d && npm run dev",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@libsql/client": "^0.17.0",
+    "@aws-sdk/client-dynamodb": "^3.1038.0",
+    "@aws-sdk/lib-dynamodb": "^3.1038.0",
     "body-parser": "^1.20.3",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
@@ -20,7 +22,8 @@
     "express": "^4.21.2",
     "multer": "^2.1.1",
     "multer-storage-cloudinary": "^4.0.0",
-    "pdfmake": "^0.2.20"
+    "pdfmake": "^0.2.20",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

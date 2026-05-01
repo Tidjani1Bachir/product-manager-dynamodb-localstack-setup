@@ -1,0 +1,27 @@
+# docker-compose.yml — LocalStack (DynamoDB only)
+# Run: docker compose up -d
+# DynamoDB endpoint: http://localhost:4566
+
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:3
+    container_name: localstack_dynamo
+    ports:
+      - "4566:4566"        # LocalStack gateway — all AWS services on this port
+    environment:
+      - SERVICES=dynamodb  # only start DynamoDB (faster boot, less RAM)
+      - DEBUG=0
+      - DATA_DIR=/var/lib/localstack/data   # persist tables between restarts
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  localstack_data:
