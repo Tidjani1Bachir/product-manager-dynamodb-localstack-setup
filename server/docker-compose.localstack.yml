@@ -12,6 +12,11 @@ services:
       - "4566:4566"        # LocalStack gateway — all AWS services on this port
     environment:
       - SERVICES=dynamodb  # only start DynamoDB (faster boot, less RAM)
+      - LOCALSTACK_API_KEY=1s-FoG...your-full-token-here  # ← Paste your token here
+      - DEBUG=1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_REGION=us-east-1
       - DEBUG=0
       - DATA_DIR=/var/lib/localstack/data   # persist tables between restarts
     volumes:
